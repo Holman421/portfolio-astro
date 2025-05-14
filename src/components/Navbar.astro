@@ -1,0 +1,24 @@
+---
+
+---
+
+<nav
+	class="fixed z-50 px-10 flex w-full h-20 border items-center justify-between gap-6 transition-all duration-600 ease-in-out"
+>
+	<div
+		id="logo"
+		class="cursor-pointer font-orbitron text-3xl transition-all duration-600 ease-in md:left-6 md:top-6 md:w-12"
+	>
+		AH
+	</div>
+	<div>Language switch</div>
+</nav>
+
+<script>
+	document.getElementById("logo")?.addEventListener("click", () => {
+		window.scrollTo({
+			top: 0,
+			behavior: "smooth"
+		});
+	});
+</script>

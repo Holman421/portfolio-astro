@@ -1,0 +1,143 @@
+---
+const greetText = "Hello, my name is";
+const name = "Ales Holman";
+---
+
+<div
+	id="hero-container"
+	class="relative bg-blue-grad-bright text-white w-[22rem] aspect-[2/1] scale-130 animate-clip-path -translate-x-[15rem] -translate-y-[10rem]"
+>
+	<div
+		id="hero-inner-gradient"
+		class="absolute top-0 bg-gradient-to-b from-blue-grad-bright to-blue-grad-dark left-0 w-full h-full z-[1] animate-clip-path"
+	>
+	</div>
+	<div class="relative z-10 font-orbitron p-7">
+		<p class="text-md font-light">{greetText}</p>
+		<h1 class="text-3xl-big mt-3">{name}</h1>
+	</div>
+</div>
+
+<script>
+	import gsap from "gsap";
+	import { isScreenBelow, createClipPath } from "../utils/utils";
+
+	const isBellow650 = isScreenBelow(650);
+	const { clipPathOutside: clipPathOutsideInitial, clipPathInside: clipPathInsideInitial } =
+		createClipPath<11>(
+			[
+				{ x: "0%", y: "0%" },
+				{ x: "0%", y: "0%" },
+				{ x: "0% + 12rem", y: "0%" },
+				{ x: "0% + 13.5rem", y: "0%" },
+				{ x: "100%", y: "0%" },
+				{ x: "100%", y: "0% + 2.5rem" },
+				{ x: "100%", y: `100%` },
+				{
+					x: `0% + 11rem`,
+					y: `100%`
+				},
+				{ x: "0% + 9rem", y: "100%" },
+				{ x: "0% + 1rem", y: "100%" },
+				{ x: "0%", y: "100%" }
+			],
+			[
+				{ x: "+ 1px", y: "" },
+				{ x: "", y: "+ 1px" },
+				{ x: "", y: "+ 1px" },
+				{ x: "", y: "+ 1px" },
+				{ x: "", y: "+ 1px" },
+				{ x: "- 1px", y: "" },
+				{ x: "- 1px", y: "- 1px" },
+				{ x: "", y: "- 1px" },
+				{ x: "", y: "- 1px" },
+				{ x: "", y: "- 1px" },
+				{ x: "+ 1px", y: "- 1px" }
+			]
+		);
+	const { clipPathOutside, clipPathInside } = createClipPath<11>(
+		[
+			{ x: "0%", y: "0% + 1rem" },
+			{ x: "0% + 1rem", y: "0%" },
+			{ x: "0% + 12rem", y: "0%" },
+			{ x: "0% + 13.5rem", y: "0% + 1.5rem" },
+			{ x: "100% - 1rem", y: "0% + 1.5rem" },
+			{ x: "100%", y: "0% + 2.5rem" },
+			{
+				x: "100%",
+				y: `100% - ${isBellow650 ? "1rem" : "2rem"}`
+			},
+			{
+				x: `0% + ${isBellow650 ? "10rem" : "11rem"}`,
+				y: `100% - ${isBellow650 ? "1rem" : "2rem"}`
+			},
+			{ x: "0% + 9rem", y: "100%" },
+			{ x: "0% + 1rem", y: "100%" },
+			{ x: "0%", y: "100% - 1rem" }
+		],
+		[
+			{ x: "+ 1px", y: "" },
+			{ x: "", y: "+ 1px" },
+			{ x: "", y: "+ 1px" },
+			{ x: "", y: "+ 1px" },
+			{ x: "", y: "+ 1px" },
+			{ x: "- 1px", y: "" },
+			{ x: "- 1px", y: "- 1px" },
+			{ x: "", y: "- 1px" },
+			{ x: "", y: "- 1px" },
+			{ x: "", y: "- 1px" },
+			{ x: "+ 1px", y: "" }
+		]
+	);
+
+	document.addEventListener("DOMContentLoaded", () => {
+		const heroContainer = document.getElementById("hero-container");
+		const heroInnerGradient = document.getElementById("hero-inner-gradient");
+
+		if (heroContainer && heroInnerGradient) {
+			const tl = gsap.timeline();
+
+			tl.set(heroContainer, {
+				clipPath: clipPathOutsideInitial
+			});
+			tl.set(heroInnerGradient, {
+				clipPath: clipPathInsideInitial
+			});
+
+			// Initial opacity 0
+			tl.set(heroContainer, { opacity: 0 });
+
+			// Realistic light startup flickering animation
+			const flickerDuration = 1.2; // Adjusted total duration
+
+			// Creating a more realistic startup effect - slower start, faster finish
+			tl.to(heroContainer, { delay: 0.5, opacity: 0.1, duration: flickerDuration * 0.2 }) // Initial slow glow
+				.to(heroContainer, { opacity: 0, duration: flickerDuration * 0.15 }) // Longer first dark phase
+				.to(heroContainer, { opacity: 0.2, duration: flickerDuration * 0.12 }) // Slightly brighter
+				.to(heroContainer, { opacity: 0, duration: flickerDuration * 0.1 }) // Getting faster
+				.to(heroContainer, { opacity: 0.3, duration: flickerDuration * 0.08 }) // Brighter
+				.to(heroContainer, { opacity: 0, duration: flickerDuration * 0.06 }) // Faster flicker
+				.to(heroContainer, { opacity: 0.5, duration: flickerDuration * 0.05 }) // Much brighter
+				.to(heroContainer, { opacity: 0, duration: flickerDuration * 0.04 }) // Very fast flicker
+				.to(heroContainer, { opacity: 0.8, duration: flickerDuration * 0.1 }) // Almost full brightness
+				.to(heroContainer, { opacity: 1, duration: flickerDuration * 0.1 }); // Final stabilization
+
+			tl.set(heroContainer, {
+				clipPath: clipPathOutside
+			});
+			tl.set(heroInnerGradient, {
+				clipPath: clipPathInside
+			});
+
+			// Continue with the position animation
+			tl.to(heroContainer, {
+				x: "-5rem",
+				y: "-5rem",
+				scale: 1.3,
+				duration: 0.5,
+				ease: "power2.out",
+				delay: 0.5
+			});
+		}
+	});
+</script>

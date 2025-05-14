@@ -1,0 +1,52 @@
+---
+// No imports needed in the frontmatter for Lenis
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+		<title>Astro Basics</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&display=swap"
+			rel="stylesheet"
+		/>
+	</head>
+	<body>
+		<main class="opacity-0">
+			<slot />
+		</main>
+	</body>
+</html>
+
+<script>
+	document.addEventListener("DOMContentLoaded", async () => {
+		const main = document.querySelector("main");
+		if (main) {
+			main.classList.remove("opacity-0");
+			main.classList.add("opacity-100");
+		}
+		try {
+			const LenisModule = await import("lenis");
+			const Lenis = LenisModule.default;
+			const lenis = new Lenis({
+				duration: 1.2,
+				easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+				wheelMultiplier: 1,
+				touchMultiplier: 2
+			});
+			function raf(time: number) {
+				lenis.raf(time);
+				requestAnimationFrame(raf);
+			}
+			requestAnimationFrame(raf);
+		} catch (error) {
+			console.error("Failed to initialize Lenis smooth scrolling:", error);
+		}
+	});
+</script>

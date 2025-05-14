@@ -1,0 +1,383 @@
+<script>
+	import * as THREE from "three";
+	import { gsap } from "gsap";
+	import { ScrollTrigger } from "gsap/ScrollTrigger";
+	import vertexShader from "./shaders/vertex.glsl";
+	import fragmentShader from "./shaders/fragment.glsl";
+	import { EffectComposer, RenderPass, ShaderPass } from "three/examples/jsm/Addons.js";
+	import { DotScreenShader } from "./postprocessing/vertex.js";
+
+	declare global {
+		interface Window {
+			scrollTimeout?: number;
+		}
+	}
+
+	// Define types
+	type ShaderConfig = {
+		noiseScale: number;
+		noiseSpeed: number;
+		patternFrequency: number;
+		firstOffset: number;
+		secondOffset: number;
+	};
+
+	// Create a class to handle the animation
+	class BackgroundAnimation {
+		// Configuration
+		private shaderColors = {
+			baseFirstColor: new THREE.Color(41 / 255, 196 / 255, 206 / 255),
+			baseSecondColor: new THREE.Color(206 / 255, 108 / 255, 41 / 255),
+			accentColor: new THREE.Color(0, 0, 0)
+		};
+
+		private sectionConfigs: ShaderConfig[] = [
+			{
+				noiseScale: 2.0,
+				noiseSpeed: 0.3,
+				patternFrequency: 5.0,
+				firstOffset: 0.0,
+				secondOffset: 0.5
+			},
+			{
+				noiseScale: 4.0,
+				noiseSpeed: 0.4,
+				patternFrequency: 10.0,
+				firstOffset: 0.0,
+				secondOffset: 0.25
+			},
+			{
+				noiseScale: 1.5,
+				noiseSpeed: 0.3,
+				patternFrequency: 5.0,
+				firstOffset: 0.0,
+				secondOffset: 0.0
+			},
+			{
+				noiseScale: 5.0,
+				noiseSpeed: 0.2,
+				patternFrequency: 20.0,
+				firstOffset: 0.0,
+				secondOffset: 1.5
+			}
+		];
+
+		// State
+		private sizes = {
+			width: window.innerWidth,
+			height: window.innerHeight,
+			pixelRatio: Math.min(window.devicePixelRatio, 2)
+		};
+
+		private state = {
+			currentSection: 1,
+			scrollProgress: 0,
+			progressScale: 0
+		};
+
+		private currentTime = 0;
+		private noiseTime = 0;
+		private scrolling = false;
+		private timeControl = {
+			increment: 0.023,
+			noiseSpeed: 0.3
+		};
+
+		private mouse = {
+			x: 0,
+			y: 0,
+			targetX: 0,
+			targetY: 0
+		};
+		// Three.js objects
+		private canvas!: HTMLCanvasElement;
+		private scene!: THREE.Scene;
+		private camera!: THREE.PerspectiveCamera;
+		private renderer!: THREE.WebGLRenderer;
+		private composer!: EffectComposer;
+		private dotScreenEffect!: ShaderPass;
+		private material!: THREE.ShaderMaterial;
+		private animationFrameId = 0;
+		private preloader!: HTMLDivElement;
+
+		constructor() {
+			this.canvas = document.querySelector("canvas.webgl") as HTMLCanvasElement;
+			this.scene = new THREE.Scene();
+
+			// Initialize components
+			this.initializeCamera();
+			this.createShaderPlane();
+			this.initializeRenderer();
+			this.setupPostProcessing();
+			this.createPreloader();
+
+			this.setupEventListeners();
+		}
+
+		private initializeCamera(): void {
+			this.camera = new THREE.PerspectiveCamera(35, this.sizes.width / this.sizes.height, 0.1, 100);
+			this.camera.position.set(0, 0, 1);
+			this.scene.add(this.camera);
+		}
+
+		private createShaderPlane(): void {
+			const initialConfig = this.sectionConfigs[0];
+			this.material = new THREE.ShaderMaterial({
+				vertexShader: vertexShader,
+				fragmentShader: fragmentShader,
+				uniforms: {
+					uTime: { value: 0 },
+					uNoiseTime: { value: 0 },
+					uResolution: { value: new THREE.Vector2(this.sizes.width, this.sizes.height) },
+					uMouse: { value: new THREE.Vector2(0, 0) },
+					uBaseFirstColor: { value: this.shaderColors.baseFirstColor.clone() },
+					uBaseSecondColor: { value: this.shaderColors.baseSecondColor.clone() },
+					uAccentColor: { value: this.shaderColors.accentColor.clone() },
+					uNoiseSpeed: { value: initialConfig.noiseSpeed },
+					uNoiseScale: { value: initialConfig.noiseScale },
+					uPatternFrequency: { value: initialConfig.patternFrequency },
+					uFirstOffset: { value: initialConfig.firstOffset },
+					uSecondOffset: { value: initialConfig.secondOffset }
+				},
+				side: THREE.DoubleSide
+			});
+
+			const geometry = new THREE.PlaneGeometry(5, 3, 32, 32);
+			const mesh = new THREE.Mesh(geometry, this.material);
+			mesh.position.z = -0.5;
+			this.scene.add(mesh);
+		}
+
+		private initializeRenderer(): void {
+			this.renderer = new THREE.WebGLRenderer({
+				canvas: this.canvas,
+				antialias: true,
+				alpha: false
+			});
+			this.renderer.setSize(this.sizes.width, this.sizes.height);
+			this.renderer.setPixelRatio(this.sizes.pixelRatio);
+			this.renderer.setClearColor(0x000000, 1);
+		}
+
+		private setupPostProcessing(): void {
+			this.composer = new EffectComposer(this.renderer);
+			this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+			this.dotScreenEffect = new ShaderPass(DotScreenShader);
+			this.dotScreenEffect.uniforms["scale"].value = 1.0;
+			this.dotScreenEffect.uniforms["angle"].value = 1.57;
+			this.dotScreenEffect.uniforms["tSize"].value = new THREE.Vector2(
+				this.sizes.width,
+				this.sizes.height
+			);
+			this.dotScreenEffect.uniforms["center"].value = new THREE.Vector2(0.5, 0.5);
+			this.composer.addPass(this.dotScreenEffect);
+		}
+
+		private createPreloader(): void {
+			this.preloader = document.createElement("div");
+			this.preloader.className =
+				"fixed top-0 left-0 w-full h-full flex items-center justify-center bg-black z-50";
+			this.preloader.innerHTML = '<div class="text-white text-lg">Loading shader...</div>';
+			document.body.appendChild(this.preloader);
+		}
+
+		private setupEventListeners(): void {
+			window.addEventListener("mousemove", this.handleMouseMove.bind(this));
+			window.addEventListener("resize", this.handleResize.bind(this));
+			window.addEventListener("unload", this.cleanup.bind(this));
+		}
+
+		private handleMouseMove(event: MouseEvent): void {
+			this.mouse.targetX = (event.clientX / this.sizes.width - 0.5) * 2;
+			this.mouse.targetY = (event.clientY / this.sizes.height - 0.5) * 2;
+		}
+
+		private handleResize(): void {
+			this.sizes.width = window.innerWidth;
+			this.sizes.height = window.innerHeight;
+			this.sizes.pixelRatio = Math.min(window.devicePixelRatio, 2);
+
+			this.camera.aspect = this.sizes.width / this.sizes.height;
+			this.camera.updateProjectionMatrix();
+
+			this.renderer.setSize(this.sizes.width, this.sizes.height);
+			this.renderer.setPixelRatio(this.sizes.pixelRatio);
+
+			this.composer.setSize(this.sizes.width, this.sizes.height);
+			this.material.uniforms.uResolution.value.set(this.sizes.width, this.sizes.height);
+			this.dotScreenEffect.uniforms["tSize"].value.set(this.sizes.width, this.sizes.height);
+		}
+
+		private cleanup(): void {
+			window.removeEventListener("mousemove", this.handleMouseMove.bind(this));
+			window.removeEventListener("resize", this.handleResize.bind(this));
+			if (this.animationFrameId) window.cancelAnimationFrame(this.animationFrameId);
+			ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+		}
+
+		private interpolateConfigs(
+			configA: ShaderConfig,
+			configB: ShaderConfig,
+			t: number
+		): ShaderConfig {
+			t = Math.max(0, Math.min(1, t));
+			const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+			return {
+				noiseScale: lerp(configA.noiseScale, configB.noiseScale, t),
+				noiseSpeed: lerp(configA.noiseSpeed, configB.noiseSpeed, t),
+				patternFrequency: lerp(configA.patternFrequency, configB.patternFrequency, t),
+				firstOffset: lerp(configA.firstOffset, configB.firstOffset, t),
+				secondOffset: lerp(configA.secondOffset, configB.secondOffset, t)
+			};
+		}
+
+		private getConfigForScrollPosition(progress: number): ShaderConfig {
+			const scaledProgress = progress * 3;
+
+			if (scaledProgress <= 0) return this.sectionConfigs[0];
+			if (scaledProgress >= 3) return this.sectionConfigs[3];
+
+			const sectionIndex = Math.floor(scaledProgress);
+			const nextSectionIndex = Math.min(sectionIndex + 1, this.sectionConfigs.length - 1);
+			const sectionProgress = scaledProgress - sectionIndex;
+
+			return this.interpolateConfigs(
+				this.sectionConfigs[sectionIndex],
+				this.sectionConfigs[nextSectionIndex],
+				sectionProgress
+			);
+		}
+
+		private initializeShader(): void {
+			const initialConfig = this.sectionConfigs[0];
+			this.material.uniforms.uNoiseScale.value = initialConfig.noiseScale;
+			this.material.uniforms.uPatternFrequency.value = initialConfig.patternFrequency;
+			this.material.uniforms.uFirstOffset.value = initialConfig.firstOffset;
+			this.material.uniforms.uSecondOffset.value = initialConfig.secondOffset;
+			this.material.uniforms.uNoiseSpeed.value = initialConfig.noiseSpeed;
+			this.timeControl.noiseSpeed = initialConfig.noiseSpeed;
+
+			// Render a few frames to ensure the shader is ready
+			for (let i = 0; i < 2; i++) {
+				this.renderer.render(this.scene, this.camera);
+				this.composer.render();
+			}
+
+			// Remove preloader with animation
+			setTimeout(() => {
+				gsap.to(this.preloader, {
+					opacity: 0,
+					duration: 0.2,
+					ease: "power2.inOut",
+					onComplete: () => this.preloader.remove()
+				});
+			}, 0);
+		}
+
+		private setupScrollTrigger(): void {
+			ScrollTrigger.create({
+				trigger: "body",
+				start: "top top",
+				end: "bottom bottom",
+				scrub: 3.5,
+				markers: false,
+				pin: false,
+				invalidateOnRefresh: true,
+				fastScrollEnd: true,
+				onUpdate: this.handleScrollUpdate.bind(this)
+			});
+		}
+		private handleScrollUpdate(self: any): void {
+			if (!this.scrolling) {
+				this.scrolling = true;
+				// We won't slow down the time increment during scrolling anymore
+				// Just change the configuration of the shader without affecting the animation speed
+			}
+
+			if (window.scrollTimeout) {
+				clearTimeout(window.scrollTimeout);
+			}
+
+			this.state.scrollProgress = self.progress;
+			const interpolatedConfig = this.getConfigForScrollPosition(self.progress);
+
+			this.updateShaderUniforms(interpolatedConfig);
+
+			window.scrollTimeout = setTimeout(() => {
+				this.scrolling = false;
+			}, 300);
+		}
+
+		private updateShaderUniforms(config: ShaderConfig): void {
+			gsap.to(this.material.uniforms.uNoiseScale, {
+				value: config.noiseScale,
+				duration: 0.8,
+				ease: "power2.out"
+			});
+			gsap.to(this.material.uniforms.uPatternFrequency, {
+				value: config.patternFrequency,
+				duration: 0.8,
+				ease: "power2.out"
+			});
+			gsap.to(this.material.uniforms.uFirstOffset, {
+				value: config.firstOffset,
+				duration: 0.8,
+				ease: "power2.out"
+			});
+			gsap.to(this.material.uniforms.uSecondOffset, {
+				value: config.secondOffset,
+				duration: 0.8,
+				ease: "power2.out"
+			});
+
+			gsap.to(this.timeControl, {
+				noiseSpeed: config.noiseSpeed,
+				duration: 0.8,
+				ease: "power2.out"
+			});
+			gsap.to(this.material.uniforms.uNoiseSpeed, {
+				value: config.noiseSpeed,
+				duration: 0.8,
+				ease: "power2.out"
+			});
+		}
+
+		private tick = (): void => {
+			this.currentTime += this.timeControl.increment;
+			this.noiseTime += this.timeControl.increment * this.timeControl.noiseSpeed;
+
+			this.material.uniforms.uTime.value = this.currentTime;
+			this.material.uniforms.uNoiseTime.value = this.noiseTime;
+
+			// Smooth mouse movement
+			this.mouse.x = this.mouse.x * 0.95 + this.mouse.targetX * 0.05;
+			this.mouse.y = this.mouse.y * 0.95 + this.mouse.targetY * 0.05;
+			this.material.uniforms.uMouse.value.set(this.mouse.x, this.mouse.y);
+
+			this.renderer.render(this.scene, this.camera);
+			this.composer.render();
+
+			this.animationFrameId = window.requestAnimationFrame(this.tick);
+		};
+
+		// Public methods to initialize and start the animation
+		public init(): void {
+			setTimeout(() => this.initializeShader(), 200);
+			this.setupScrollTrigger();
+			this.tick();
+		}
+	}
+
+	// Initialize the animation when DOM is loaded
+	document.addEventListener("DOMContentLoaded", () => {
+		gsap.registerPlugin(ScrollTrigger);
+		const backgroundAnimation = new BackgroundAnimation();
+		backgroundAnimation.init();
+	});
+</script>
+
+<div class="fixed top-0 left-0 w-full h-full z-[-1] bg-black">
+	<canvas class="webgl"></canvas>
+</div>
